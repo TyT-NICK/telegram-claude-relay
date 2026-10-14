@@ -1,0 +1,14 @@
+{
+  "name": "telegram-relay",
+  "description": "Telegram Relay for Claude Code",
+  "owner": {
+    "name": "Artem Kuroptev"
+  },
+  "plugins": [
+    {
+      "name": "telegram-relay",
+      "source": "./",
+      "description": "Answer Claude Code questions, permission prompts and follow-ups from Telegram"
+    }
+  ]
+}

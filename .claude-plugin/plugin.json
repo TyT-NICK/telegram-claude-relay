@@ -1,0 +1,75 @@
+{
+  "name": "telegram-relay",
+  "displayName": "Telegram Relay",
+  "version": "0.2.0",
+  "description": "Answer Claude Code questions, permission prompts and follow-ups from Telegram while you're away from the keyboard",
+  "author": {
+    "name": "Artem Kuroptev"
+  },
+  "homepage": "https://github.com/TyT-NICK/telegram-claude-relay",
+  "repository": "https://github.com/TyT-NICK/telegram-claude-relay",
+  "keywords": ["telegram", "notifications", "remote", "hooks", "smartwatch"],
+  "userConfig": {
+    "idle_seconds": {
+      "type": "number",
+      "title": "Away after (seconds)",
+      "description": "In auto mode, prompts go to Telegram after this many seconds without keyboard or mouse input.",
+      "default": 120,
+      "min": 10,
+      "max": 86400
+    },
+    "when_unknown": {
+      "type": "string",
+      "title": "If idle time can't be detected",
+      "description": "What auto mode does when it can't read idle time, e.g. over Remote-SSH: desk keeps prompts in Claude Code, away sends them to Telegram.",
+      "options": ["desk", "away"],
+      "default": "desk"
+    },
+    "idle_command": {
+      "type": "string",
+      "title": "Custom idle command",
+      "description": "Optional shell command that prints idle time in milliseconds. Leave empty to use the built-in detection (GNOME, xprintidle, screen lock).",
+      "default": ""
+    },
+    "answer_timeout": {
+      "type": "number",
+      "title": "Answer timeout (seconds)",
+      "description": "How long a question or permission prompt waits for a Telegram answer before it goes back to Claude Code.",
+      "default": 1800,
+      "min": 30,
+      "max": 3500
+    },
+    "stop_wait": {
+      "type": "number",
+      "title": "Reply window after Claude finishes (seconds)",
+      "description": "How long to wait for a Telegram reply that continues the session. 0 sends the message without waiting.",
+      "default": 600,
+      "min": 0,
+      "max": 3500
+    },
+    "relay_questions": {
+      "type": "boolean",
+      "title": "Relay questions",
+      "description": "Send Claude's multiple-choice questions to Telegram.",
+      "default": true
+    },
+    "relay_permissions": {
+      "type": "boolean",
+      "title": "Relay permission prompts",
+      "description": "Send permission prompts to Telegram with Allow / Deny buttons.",
+      "default": true
+    },
+    "relay_finished": {
+      "type": "boolean",
+      "title": "Relay finished turns",
+      "description": "Send a message when Claude finishes, so you can reply to continue.",
+      "default": true
+    },
+    "relay_notifications": {
+      "type": "boolean",
+      "title": "Relay other notifications",
+      "description": "Forward other Claude Code notifications as plain alerts.",
+      "default": true
+    }
+  }
+}
