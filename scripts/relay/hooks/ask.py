@@ -4,6 +4,7 @@ Claude Code accepts the answer when the hook returns permissionDecision "allow"
 with the original questions plus an "answers" map in updatedInput.
 """
 
+from ..markdown import inline
 from ..presence import routing
 from ..request import DESK, Request, callback_payload, project_label, reply_text
 from ..telegram import button, esc
@@ -32,11 +33,11 @@ def run(cfg, event):
 def format_question(label, question, index, total):
     multi = bool(question.get("multiSelect"))
     lines = ["❓ <b>%s</b>%s" % (esc(label), " · %d/%d" % (index + 1, total) if total > 1 else "")]
-    lines += ["", "<b>%s</b>" % esc(question.get("question"), 1000)]
+    lines += ["", "<b>%s</b>" % inline(question.get("question") or "", 1000)]
     for i, opt in enumerate(question.get("options") or []):
-        line = "%d. <b>%s</b>" % (i + 1, esc(opt.get("label"), 200))
+        line = "%d. <b>%s</b>" % (i + 1, inline(opt.get("label") or "", 200))
         if opt.get("description"):
-            line += " — %s" % esc(opt["description"], 300)
+            line += " — %s" % inline(opt["description"], 300)
         lines.append(line)
     hint = "Tap the options, then Done" if multi else "Tap an option"
     lines += ["", "<i>%s, or reply to this message with your own answer.</i>" % hint]

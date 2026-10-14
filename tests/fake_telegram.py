@@ -1,11 +1,20 @@
-"""A fake Telegram Bot API server that taps buttons and sends replies on cue."""
+"""A fake Telegram Bot API server that taps buttons and sends replies on cue.
+
+Like the real one, it rejects HTML messages that break Telegram's formatting rules.
+"""
 
 import json
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from telegram_rules import problems
+
 CHAT = 42
+
+
+class BadRequest(Exception):
+    pass
 
 
 class FakeTelegram:
@@ -24,8 +33,14 @@ class FakeTelegram:
             def do_POST(self):
                 method = self.path.rsplit("/", 1)[-1]
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])) or b"{}")
-                data = json.dumps({"ok": True, "result": fake.handle(method, body)}).encode()
-                self.send_response(200)
+                try:
+                    data = {"ok": True, "result": fake.handle(method, body)}
+                    status = 200
+                except BadRequest as err:
+                    data = {"ok": False, "error_code": 400, "description": str(err)}
+                    status = 400
+                data = json.dumps(data).encode()
+                self.send_response(status)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(data)
@@ -42,6 +57,7 @@ class FakeTelegram:
             self.sent = []  # (message_id, text, reply_markup)
             self.edits = []
             self.script = []
+            self.rejected = []  # texts refused for bad formatting
 
     def stop(self):
         self.server.shutdown()
@@ -50,6 +66,11 @@ class FakeTelegram:
     # ------------------------------------------------------------ Bot API
 
     def handle(self, method, body):
+        if body.get("parse_mode") == "HTML" and "text" in body:
+            found = problems(body["text"])
+            if found:
+                self.rejected.append(body["text"])
+                raise BadRequest("Bad Request: can't parse entities: %s" % found[0])
         if method == "getUpdates":
             deadline = time.time() + min(body.get("timeout", 0), 1)
             while True:

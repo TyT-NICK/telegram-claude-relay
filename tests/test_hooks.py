@@ -53,6 +53,7 @@ class HookTests(unittest.TestCase):
         self.cli("mode", "away")
 
     def tearDown(self):
+        self.assertEqual(self.fake.rejected, [], "sent HTML that Telegram would reject")
         shutil.rmtree(self.home, ignore_errors=True)
         shutil.rmtree(self.claude_dir, ignore_errors=True)
 
@@ -159,9 +160,16 @@ class HookTests(unittest.TestCase):
         self.assertEqual(out["decision"], "block")
         self.assertIn("now run the tests", out["reason"])
 
-    def test_stop_ok_ends(self):
-        self.fake.script = [[("tap", "OK")]]
+    def test_stop_no_reply_needed_ends(self):
+        self.fake.script = [[("tap", "No reply needed")]]
         self.assertIsNone(self.hook("stop", dict(EVENT, last_assistant_message="All done.")))
+
+    def test_stop_message_is_formatted(self):
+        message = "**Done.** Run `make test`:\n\n- one\n- two"
+        self.hook("stop", dict(EVENT, last_assistant_message=message), stop_wait=0)
+        self.assertEqual(self.fake.sent[0][1],
+                         "✅ <b>myproj</b> · Claude finished\n\n"
+                         "<b>Done.</b> Run <code>make test</code>:\n\n• one\n• two")
 
     def test_stop_wait_zero_only_notifies(self):
         start = time.time()

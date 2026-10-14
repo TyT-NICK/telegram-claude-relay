@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 
+from ..markdown import to_html
 from ..presence import routing
 from ..request import Request, callback_payload, project_label, reply_text
 from ..telegram import Telegram, button, esc
@@ -36,7 +37,7 @@ def run(cfg, event):
     message = event.get("last_assistant_message") or last_message_from_transcript(
         event.get("transcript_path"))
     text = "✅ <b>%s</b> · Claude finished\n\n%s" % (
-        esc(project_label(event)), esc(message or "(no text)", 3000, tail=True))
+        esc(project_label(event)), to_html(message or "(no text)", limit=3000))
     if cfg["stop_wait"] <= 0:
         Telegram(cfg).send(text)
         return None
@@ -50,7 +51,7 @@ def run(cfg, event):
 
     hint = "\n\n<i>Reply to this message to continue the session.</i>"
     with Request(cfg, route, cfg["stop_wait"]) as req:
-        message_id = req.send(text + hint, [[button("👍 OK", req.data("ok"))]])
+        message_id = req.send(text + hint, [[button("👍 No reply needed", req.data("ok"))]])
         result = req.wait(handle)
 
     if result[0] != "answer":

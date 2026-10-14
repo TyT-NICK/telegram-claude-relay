@@ -2,8 +2,79 @@
 
 import html
 import json
+import re
 import urllib.error
 import urllib.request
+
+TAG = re.compile(r"<(/?)([a-z-]+)[^>]*>")
+# Telegram lets these contain, and sit inside, anything except code and pre
+STYLE_TAGS = {"b", "i", "u", "s", "tg-spoiler"}
+EMPTY_TAG = re.compile(r"<(b|i|u|s|a)(?:\s[^>]*)?>(\s*)</\1>")
+
+
+def fix_nesting(text):
+    """Make HTML follow Telegram's nesting rules, which reject the whole message otherwise.
+
+    Code inside bold or italic: close the styles around the code and reopen them after.
+    Code, pre, links and quotes can't contain each other (except pre > code), so an
+    inner one of those loses its tag and keeps its text.
+    """
+    out, stack, actions, pos = [], [], [], 0
+    for match in TAG.finditer(text):
+        out.append(text[pos:match.start()])
+        pos = match.end()
+        closing, name, tag = match.group(1) == "/", match.group(2), match.group(0)
+        if name in STYLE_TAGS:
+            if closing:
+                for i in range(len(stack) - 1, -1, -1):
+                    if stack[i][0] == name:
+                        del stack[i]
+                        break
+            else:
+                stack.append((name, tag))
+            out.append(tag)
+            continue
+        if not closing:
+            others = [n for n, _ in stack if n not in STYLE_TAGS]
+            if name == "code" and others[-1:] == ["pre"]:
+                action = "keep"
+            elif others:
+                action = "drop"
+            elif stack and name in ("code", "pre"):
+                action = "split"
+            else:
+                action = "keep"
+            actions.append((action, list(stack)))
+            if action == "drop":
+                continue
+            if action == "split":
+                out.extend("</%s>" % n for n, _ in reversed(stack))
+            out.append(tag)
+            stack.append((name, tag))
+            continue
+        if not actions:
+            continue  # a stray closing tag
+        action, saved = actions.pop()
+        if action == "drop":
+            continue
+        for i in range(len(stack) - 1, -1, -1):
+            if stack[i][0] == name:
+                del stack[i]
+                break
+        out.append(tag)
+        if action == "split":
+            out.extend(t for n, t in saved if n in STYLE_TAGS)
+    out.append(text[pos:])
+    return EMPTY_TAG.sub(r"\2", "".join(out))
+
+
+def plain_text(text):
+    """HTML message as plain text, for when Telegram rejects the formatting anyway."""
+    return html.unescape(TAG.sub("", text))
+
+
+def is_format_error(err):
+    return "can't parse entities" in str(err).lower()
 
 
 class TelegramError(Exception):
@@ -33,18 +104,22 @@ class Telegram:
             raise TelegramError("%s: %s" % (method, body.get("description")))
         return body["result"]
 
+    def call_html(self, method, text, **params):
+        """Call a method with HTML text; resend as plain text if Telegram can't parse it."""
+        try:
+            return self.call(method, text=fix_nesting(text), parse_mode="HTML", **params)
+        except TelegramError as err:
+            if not is_format_error(err):
+                raise
+            return self.call(method, text=plain_text(text), **params)
+
     def send(self, text, buttons=None, reply_to=None):
-        params = {
-            "chat_id": self.chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": True,
-        }
+        params = {"chat_id": self.chat_id, "disable_web_page_preview": True}
         if buttons:
             params["reply_markup"] = {"inline_keyboard": buttons}
         if reply_to:
             params["reply_parameters"] = {"message_id": reply_to}
-        return self.call("sendMessage", **params)["message_id"]
+        return self.call_html("sendMessage", text, **params)["message_id"]
 
     def edit(self, message_id, text=None, buttons=None):
         """Best effort: replace a message's text and/or keyboard."""
@@ -54,9 +129,9 @@ class Telegram:
                 self.call("editMessageReplyMarkup", chat_id=self.chat_id,
                           message_id=message_id, reply_markup=markup)
             else:
-                self.call("editMessageText", chat_id=self.chat_id, message_id=message_id,
-                          text=text, parse_mode="HTML", disable_web_page_preview=True,
-                          reply_markup=markup)
+                self.call_html("editMessageText", text, chat_id=self.chat_id,
+                               message_id=message_id, disable_web_page_preview=True,
+                               reply_markup=markup)
         except (TelegramError, OSError):
             pass
 

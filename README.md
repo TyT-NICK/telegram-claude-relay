@@ -6,7 +6,7 @@ Answer Claude Code from your phone while you're away from the keyboard. If your 
 | --- | --- | --- |
 | asks you to pick options (`AskUserQuestion`) | the question with one button per option | tap an option (multi-select: toggle, then **Done**), or reply with your own answer |
 | asks permission to run a tool | the tool and its command or file | **Allow**, **Always allow**, **Deny**, or reply with text to deny and say what to do instead |
-| finishes its turn | the end of Claude's last message | reply to keep the session going, or tap **👍 OK** |
+| finishes its turn | the end of Claude's last message | reply to keep the session going, or tap **👍 No reply needed** to end the turn |
 | sends any other notification | a plain alert | — |
 
 Every prompt also has a **💻 At desk** button. It closes the Telegram prompt and shows the normal one in Claude Code. A prompt nobody answers in time falls back to Claude Code the same way, so nothing gets stuck.
@@ -111,6 +111,7 @@ The hooks call `scripts/run.sh`, which picks the first working Python (`python3`
 - **Several sessions at once.** One process polls Telegram and the others share its updates through `~/.config/tg-relay/run/inbox`. Buttons always reach the right prompt. Replies reach the prompt you reply to (swipe-reply in Telegram). A plain message goes to the newest prompt. Message titles show the project folder name.
 - **Chatting after Claude finishes.** Each reply continues the turn through the Stop hook. Claude Code ends the turn anyway after 8 continuations in a row; the next prompt starts a fresh count.
 - **Watches.** Phone notifications are mirrored to the watch, including Huawei/HarmonyOS watches through the Huawei Health app. Telegram's inline buttons don't show on most watches, so you tap on the phone.
+- **Formatting.** Claude's Markdown is converted to Telegram formatting: bold, italic, code and code blocks, links and quotes. Headings become bold lines, lists get bullets, and each table row becomes a `• first cell — other cells` line, since Telegram has no tables. If Telegram still rejects a message's formatting, it is resent as plain text.
 - **Errors.** Any failure makes the hook fall back to the normal prompt. Errors are logged to `~/.config/tg-relay/run/error.log`.
 - **Security.** Only the paired chat is accepted. Anyone holding the bot token could read the prompts, so keep it private.
 
@@ -126,7 +127,8 @@ scripts/tg_relay.py              entry point
 scripts/relay/
   config.py                      settings and mode
   presence.py                    idle detection, decides whether a prompt goes to Telegram
-  telegram.py                    Bot API client, message formatting
+  telegram.py                    Bot API client, Telegram's nesting rules, plain-text fallback
+  markdown.py                    Markdown to Telegram HTML
   inbox.py                       one update stream shared by all waiting hooks
   request.py                     one prompt waiting for an answer
   storage.py                     state directory, file helpers, lock
