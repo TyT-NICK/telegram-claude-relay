@@ -1,17 +1,25 @@
 # Telegram Relay for Claude Code
 
-Answer Claude Code from your phone while you're away from the keyboard. If your watch mirrors phone notifications, you'll see the alerts there too.
+Answer Claude Code from your phone while you're away from the keyboard. If your watch shows your phone's notifications, you'll see the messages there too.
 
 | When Claude… | You get in Telegram | You can… |
 | --- | --- | --- |
 | asks you to pick options (`AskUserQuestion`) | the question with one button per option | tap an option (multi-select: toggle, then **Done**), or reply with your own answer |
-| asks permission to run a tool | the tool and its command or file | **Allow**, **Always allow**, **Deny**, or reply with text to deny and say what to do instead |
+| asks permission to run a tool | the tool and its command or file | **Allow**, **Deny**, **Always allow** (when Claude Code offers a rule for it), or reply with text to deny and say what to do instead |
 | finishes its turn | the end of Claude's last message | reply to keep the session going, or tap **👍 No reply needed** to end the turn |
 | sends any other notification | a plain alert | — |
 
-Every prompt also has a **💻 At desk** button. It closes the Telegram prompt and shows the normal one in Claude Code. A prompt nobody answers in time falls back to Claude Code the same way, so nothing gets stuck.
+Questions and permission prompts also have a **💻 At desk** button, which closes the Telegram prompt and shows the normal one in Claude Code. If nobody answers in time, the prompt goes back to Claude Code the same way, so nothing gets stuck.
 
-It works the same in the VS Code extension, the terminal CLI and the Claude desktop app, because it is built on Claude Code [hooks](https://code.claude.com/docs/en/hooks). It runs on Linux, macOS and Windows and needs only Python 3.8+ (standard library) and a Telegram bot. On Windows, hooks run through Git Bash, which Claude Code normally uses there.
+It is built on Claude Code [hooks](https://code.claude.com/docs/en/hooks), so it works wherever Claude Code runs hooks: the terminal CLI, the VS Code extension and the desktop app.
+
+**Requirements**
+- Claude Code v2.1.271 or later
+- Python 3.8+ (standard library only)
+- a Telegram bot
+- on Windows, Git Bash, which Claude Code uses to run hooks there
+
+Linux, macOS and Windows are supported.
 
 ## Setup
 
@@ -24,18 +32,22 @@ It works the same in the VS Code extension, the terminal CLI and the Claude desk
    python3 telegram-claude-relay/scripts/tg_relay.py setup
    ```
 
-   On Windows, run it in PowerShell with `python` (or `py`) instead of `python3`.
+   On Windows, use `python` (or `py`) instead of `python3`.
 
-   Paste the token when asked. It isn't echoed. In a classic Windows console, Ctrl+V reads the token from the clipboard, and right-click pastes as well. Run `setup --show` to see what you type. Then send the `/pair <code>` message it prints to your bot. The token and chat id are saved to `~/.config/tg-relay/config.json` with `600` permissions. You can supply them through the environment instead: `TG_RELAY_BOT_TOKEN`, `TG_RELAY_CHAT_ID`.
+   Paste the token when asked. It isn't shown as you type. In a classic Windows console, Ctrl+V reads the token from the clipboard, and right-click pastes as well. Run `setup --show` to see what you type. Then send your bot the `/pair <code>` message that setup prints.
 
-3. **Install the plugin.** Inside Claude Code (in the desktop app too):
+   The token and chat id are saved to `~/.config/tg-relay/config.json`, which on Linux and macOS is readable only by you. You can supply them through the environment instead: `TG_RELAY_BOT_TOKEN`, `TG_RELAY_CHAT_ID`.
+
+3. **Install the plugin.** Inside Claude Code:
 
    ```
    /plugin marketplace add TyT-NICK/telegram-claude-relay
    /plugin install telegram-relay@telegram-relay
    ```
 
-   Or from a shell: `claude plugin marketplace add TyT-NICK/telegram-claude-relay`, then `claude plugin install telegram-relay@telegram-relay`. A local clone also works as a marketplace, for example `/plugin marketplace add ./telegram-claude-relay`, where the client allows local paths. Pick user scope so it applies to every project. Claude Code then shows the plugin's [settings](#settings). The defaults are fine to start with. Restart Claude Code, or run `/reload-plugins`.
+   Or from a shell: `claude plugin marketplace add TyT-NICK/telegram-claude-relay`, then `claude plugin install telegram-relay@telegram-relay`. Choose user scope so it applies to every project. Then run `/reload-plugins`, or restart Claude Code.
+
+   The defaults are fine to start with. See [Settings](#settings) to change them.
 
 4. **Try it.**
 
@@ -46,13 +58,22 @@ It works the same in the VS Code extension, the terminal CLI and the Claude desk
 
    Or run `/telegram-relay:status` in Claude Code.
 
+### Updating
+
+`/reload-plugins` reloads the installed copy; it doesn't check GitHub. To get a new version:
+
+1. Run `/plugin marketplace update telegram-relay`.
+2. Update the plugin from the **Installed** tab of `/plugin`.
+
+If the version still doesn't change, remove the marketplace, add it again, and reinstall. Your pairing is kept in `~/.config/tg-relay`, so it survives a reinstall.
+
 ## Modes
 
-Switch with `/telegram-relay:mode <mode>` in Claude Code, or `tg_relay.py mode <mode>` in a shell.
+Switch with `/telegram-relay:mode <mode>` in Claude Code, or `tg_relay.py mode <mode>` in a shell. The mode is stored in `~/.config/tg-relay/mode`, so it applies to every Claude Code session on that machine and survives restarts.
 
 | Mode | Behaviour |
 | --- | --- |
-| `auto` (default) | Telegram once you've had no keyboard or mouse input for `idle_seconds`. If you come back while a prompt is waiting, it moves back to Claude Code within a few seconds. |
+| `auto` (default) | Telegram once you've had no keyboard or mouse input for `idle_seconds`. If you come back while a question or permission prompt is waiting, it moves back to Claude Code within about 10 seconds. |
 | `away` | Everything goes to Telegram. |
 | `desk` | Everything stays in Claude Code. |
 | `off` | The plugin does nothing. |
@@ -61,20 +82,20 @@ Switch with `/telegram-relay:mode <mode>` in Claude Code, or `tg_relay.py mode <
 
 The first source that answers wins:
 
-1. The **presence file** `~/.config/tg-relay/presence`, if it was written in the last 90 s: `{"last_active": <epoch seconds>}`. An editor extension or any other tool can keep it updated.
+1. The **presence file** `~/.config/tg-relay/presence`, if it was written in the last 90 s: `{"last_active": <epoch seconds>}`. Any tool, such as an editor extension or a script, can keep it updated.
 2. Your own `idle_command`, which prints idle time in milliseconds.
 3. The system's idle time:
    - **Windows**: `GetLastInputInfo`
    - **macOS**: `HIDIdleTime` from `ioreg`
    - **Linux**: a locked screen first (`loginctl` `LockedHint` or the GNOME screensaver; always counts as away), then **GNOME** (Wayland or X11) `org.gnome.Mutter.IdleMonitor`, then **X11** `xprintidle`
 
-If none of these work, `when_unknown` decides. The default `desk` keeps prompts local, so you then use `away` when you leave. That is the usual situation over Remote-SSH, because hooks run on the remote host. Run `status` to see which source is used.
+If none of these work, `when_unknown` decides. The default `desk` keeps prompts in Claude Code, so you switch to `away` when you leave. This is typical over Remote-SSH, where hooks run on the remote host. Run `status` to see which source is used.
 
 KDE example for `idle_command`: `qdbus org.freedesktop.ScreenSaver /ScreenSaver GetSessionIdleTime`. Check the unit on your system; the script expects milliseconds.
 
 ## Settings
 
-Change these in Claude Code with `/config`, where each one appears as a row. Claude Code saves them in `~/.claude/settings.json` under `pluginConfigs` → `telegram-relay@telegram-relay` → `options`, and you can edit them there too. If a change doesn't apply right away, run `/reload-plugins`.
+Change them with `/plugin configure telegram-relay@telegram-relay`, or in the terminal's `/config` panel, where each setting is a row. Claude Code saves them in `~/.claude/settings.json` under `pluginConfigs` → `telegram-relay@telegram-relay` → `options`, and you can edit them there too. If a change doesn't apply right away, run `/reload-plugins`.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -96,24 +117,30 @@ Each setting is resolved in this order, later ones winning:
 2. `~/.config/tg-relay/config.json`, using the same keys. This is useful when you install the hooks without the plugin system.
 3. the plugin settings above
 
-`config.json` also holds what `setup` stores: `bot_token` and `chat_id`. The environment variables `TG_RELAY_BOT_TOKEN` and `TG_RELAY_CHAT_ID` override those two. Two extra keys can be set there: `notify_skip`, the notification types not forwarded (default `["permission_prompt", "idle_prompt"]`, which the other hooks already cover), and `api_base` for a Bot API proxy. Set `TG_RELAY_HOME` to move the whole state directory.
+`config.json` also holds what `setup` stores: `bot_token` and `chat_id`. The environment variables `TG_RELAY_BOT_TOKEN` and `TG_RELAY_CHAT_ID` override those two.
+
+Two more keys can only be set in `config.json`:
+- `notify_skip`: notification types that aren't forwarded. The default is `["permission_prompt", "idle_prompt"]`, because the other hooks already cover them.
+- `api_base`: the address of a Bot API proxy.
+
+Set `TG_RELAY_HOME` to move the whole state directory.
 
 Waits are capped at 3500 s to stay under the 3600 s hook timeout in `hooks/hooks.json`.
 
 ## Without the plugin system
 
-Add the hooks to `~/.claude/settings.json` yourself. Copy the `hooks` object from [hooks/hooks.json](hooks/hooks.json) and replace `${CLAUDE_PLUGIN_ROOT}` with the absolute path of this repo.
+Add the hooks to `~/.claude/settings.json` yourself. Copy the `hooks` object from [hooks/hooks.json](hooks/hooks.json) and replace `${CLAUDE_PLUGIN_ROOT}` with the absolute path of your clone. The `/telegram-relay:*` commands come with the plugin, so use `tg_relay.py mode` and `tg_relay.py status` instead.
 
 The hooks call `scripts/run.sh`, which picks the first working Python (`python3`, `python`, then `py -3`). That skips the Microsoft Store placeholder that `python3` often is on Windows. It also never exits with code 2, which Claude Code would read as "block".
 
 ## Good to know
 
-- **Several sessions at once.** One process polls Telegram and the others share its updates through `~/.config/tg-relay/run/inbox`. Buttons always reach the right prompt. Replies reach the prompt you reply to (swipe-reply in Telegram). A plain message goes to the newest prompt. Message titles show the project folder name.
-- **Chatting after Claude finishes.** Each reply continues the turn through the Stop hook. Claude Code ends the turn anyway after 8 continuations in a row; the next prompt starts a fresh count.
-- **Watches.** Phone notifications are mirrored to the watch, including Huawei/HarmonyOS watches through the Huawei Health app. Telegram's inline buttons don't show on most watches, so you tap on the phone.
+- **Replying after Claude finishes.** A reply can only reach Claude while its turn is still open, so the Stop hook keeps the turn open for `stop_wait` seconds after the "Claude finished" message. During that time Claude Code shows the session as busy. Tap **👍 No reply needed** to end it early. Each reply continues the turn, and Claude Code ends the turn anyway after 8 continuations in a row.
+- **Several sessions at once.** One process polls Telegram and the others share its updates through `~/.config/tg-relay/run/inbox`. A button press always reaches the prompt it belongs to. A swipe-reply reaches the message you reply to, and a plain message goes to the newest prompt. Message titles show the project folder name.
+- **Watches.** The messages appear on a smartwatch like any other phone notification. Telegram's buttons may not be available on the watch, so you may need the phone to answer.
 - **Formatting.** Claude's Markdown is converted to Telegram formatting: bold, italic, code and code blocks, links and quotes. Headings become bold lines, lists get bullets, and each table row becomes a `• first cell — other cells` line, since Telegram has no tables. If Telegram still rejects a message's formatting, it is resent as plain text.
-- **Errors.** Any failure makes the hook fall back to the normal prompt. Errors are logged to `~/.config/tg-relay/run/error.log`.
-- **Security.** Only the paired chat is accepted. Anyone holding the bot token could read the prompts, so keep it private.
+- **Errors.** If a hook fails, Claude Code shows its normal prompt. Errors are logged to `~/.config/tg-relay/run/error.log`.
+- **Security.** Only the paired chat is accepted, and anyone in that chat can approve tool use. Anyone holding the bot token could read the prompts, so keep it private.
 
 ## Layout
 
@@ -132,13 +159,13 @@ scripts/relay/
   inbox.py                       one update stream shared by all waiting hooks
   request.py                     one prompt waiting for an answer
   storage.py                     state directory, file helpers, lock
-  winapi.py                      Windows idle time and process checks (ctypes)
+  winapi.py                      Windows idle time, process checks and clipboard (ctypes)
   cli.py                         setup, status, mode, test
   hooks/                         ask, permission, stop, notify: one module per hook
 tests/                           python3 -m unittest discover -s tests
 ```
 
-The tests run the hooks against a fake Telegram server, so they need no bot or network. Adding a setting takes two edits: `OPTIONS` in `scripts/relay/config.py` and `userConfig` in `plugin.json`. A test checks that the two match.
+The tests run the hooks against a fake Telegram server that enforces Telegram's formatting rules, so they need no bot or network. Adding a setting takes two edits: `OPTIONS` in `scripts/relay/config.py` and `userConfig` in `plugin.json`. A test checks that the two match.
 
 ## License
 
