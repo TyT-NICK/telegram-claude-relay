@@ -8,6 +8,7 @@
   },
   "homepage": "https://github.com/TyT-NICK/telegram-claude-relay",
   "repository": "https://github.com/TyT-NICK/telegram-claude-relay",
+  "license": "MIT",
   "keywords": ["telegram", "notifications", "remote", "hooks", "smartwatch"],
   "userConfig": {
     "idle_seconds": {

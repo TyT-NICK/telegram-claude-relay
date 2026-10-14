@@ -137,3 +137,7 @@ tests/                           python3 -m unittest discover -s tests
 ```
 
 The tests run the hooks against a fake Telegram server, so they need no bot or network. Adding a setting takes two edits: `OPTIONS` in `scripts/relay/config.py` and `userConfig` in `plugin.json`. A test checks that the two match.
+
+## License
+
+[MIT](LICENSE)
