@@ -1,11 +1,13 @@
 """The few Windows API calls tg-relay needs, through ctypes (Windows only)."""
 
 import ctypes
+import time
 from ctypes import wintypes
 
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 STILL_ACTIVE = 259
 ERROR_ACCESS_DENIED = 5
+CF_UNICODETEXT = 13
 
 user32 = ctypes.WinDLL("user32")
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -15,6 +17,12 @@ kernel32.OpenProcess.restype = wintypes.HANDLE
 kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
 kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
 kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+kernel32.GlobalLock.restype = wintypes.LPVOID
+kernel32.GlobalLock.argtypes = (wintypes.HGLOBAL,)
+kernel32.GlobalUnlock.argtypes = (wintypes.HGLOBAL,)
+user32.OpenClipboard.argtypes = (wintypes.HWND,)
+user32.GetClipboardData.restype = wintypes.HANDLE
+user32.GetClipboardData.argtypes = (wintypes.UINT,)
 
 
 class LASTINPUTINFO(ctypes.Structure):
@@ -42,3 +50,26 @@ def pid_alive(pid):
         return code.value == STILL_ACTIVE
     finally:
         kernel32.CloseHandle(handle)
+
+
+def clipboard_text():
+    """Text on the clipboard, or None if there is none or the clipboard stays busy."""
+    for _ in range(10):  # another program may hold the clipboard for a moment
+        if user32.OpenClipboard(None):
+            break
+        time.sleep(0.05)
+    else:
+        return None
+    try:
+        handle = user32.GetClipboardData(CF_UNICODETEXT)
+        if not handle:
+            return None
+        pointer = kernel32.GlobalLock(handle)
+        if not pointer:
+            return None
+        try:
+            return ctypes.wstring_at(pointer)
+        finally:
+            kernel32.GlobalUnlock(handle)
+    finally:
+        user32.CloseClipboard()

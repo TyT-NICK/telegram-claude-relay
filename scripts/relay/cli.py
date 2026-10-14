@@ -1,7 +1,8 @@
 """tg-relay: answer Claude Code prompts from Telegram.
 
 usage:
-    tg_relay.py setup         store the bot token and pair your Telegram chat
+    tg_relay.py setup [--show]  store the bot token and pair your Telegram chat
+                              (--show: type the token visibly)
     tg_relay.py status        show pairing, mode, presence detection and settings
     tg_relay.py mode [MODE]   show or set the mode: auto | away | desk | off
     tg_relay.py test          send a sample question and print what you tap
@@ -10,6 +11,7 @@ usage:
 
 import getpass
 import os
+import re
 import secrets
 import signal
 import socket
@@ -26,6 +28,47 @@ from .storage import CONFIG_FILE, LOCK_FILE, OFFSET_FILE, FileLock, ensure_dirs
 from .telegram import Telegram, TelegramError, esc
 
 PAIR_SECONDS = 300
+# Bot tokens look like 123456789:AAH... (bot id, a colon, about 35 more characters)
+TOKEN_RE = re.compile(r"^\d+:[A-Za-z0-9_-]{30,}$")
+CTRL_V = "\x16"
+
+
+def paste_clipboard(text):
+    """In a classic Windows console, Ctrl+V types the control character 0x16 into getpass
+    instead of pasting.
+
+    Replace it with the clipboard text so pasting works as people expect.
+    """
+    if CTRL_V not in text or os.name != "nt":
+        return text
+    from . import winapi
+
+    try:
+        clipboard = winapi.clipboard_text()
+    except OSError:
+        clipboard = None
+    return text.replace(CTRL_V, clipboard or "")
+
+
+def read_token(current, show=False, tries=3):
+    """Ask for the bot token; return it, `current` on an empty answer, or None after bad tries."""
+    prompt = "Bot token from @BotFather (%s; Enter keeps the current one): " % (
+        "visible" if show else "hidden")
+    for _ in range(tries):
+        typed = input(prompt) if show else getpass.getpass(prompt)
+        if not typed.strip():
+            return current
+        token = paste_clipboard(typed).strip()
+        if not token:
+            print("Nothing was pasted: the clipboard has no text. Copy the token and try again.")
+            continue
+        if TOKEN_RE.match(token):
+            return token
+        print("That isn't a bot token: expected digits, a colon, then about 35 letters and digits.")
+        if any(ord(c) < 32 for c in token):
+            print("The input has control characters. Copy the token again and paste it"
+                  " (right-click also pastes), or run setup --show.")
+    return None
 
 
 def wait_for_pairing(tg, code):
@@ -58,17 +101,19 @@ def wait_for_pairing(tg, code):
 def cmd_setup(args):
     ensure_dirs()
     cfg = load_config()
-    token = os.environ.get("TG_RELAY_BOT_TOKEN") or getpass.getpass(
-        "Bot token from @BotFather (hidden; Enter keeps the current one): ").strip()
-    token = token or cfg["bot_token"]
+    token = os.environ.get("TG_RELAY_BOT_TOKEN") or read_token(cfg["bot_token"], "--show" in args)
     if not token:
         print("No token given.")
+        return 1
+    if not TOKEN_RE.match(token):
+        print("The token %s isn't a bot token." % (
+            "in TG_RELAY_BOT_TOKEN" if os.environ.get("TG_RELAY_BOT_TOKEN") else "stored before"))
         return 1
     cfg["bot_token"] = token
     tg = Telegram(cfg)
     try:
         bot = tg.call("getMe")
-    except (TelegramError, OSError) as err:
+    except (TelegramError, OSError, ValueError) as err:
         print("Telegram rejected the token: %s" % err)
         return 1
 

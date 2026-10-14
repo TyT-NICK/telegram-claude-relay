@@ -26,7 +26,7 @@ It works the same in the VS Code extension, the terminal CLI and the Claude desk
 
    On Windows, run it in PowerShell with `python` (or `py`) instead of `python3`.
 
-   Paste the token when asked. It isn't echoed. Then send the `/pair <code>` message it prints to your bot. The token and chat id are saved to `~/.config/tg-relay/config.json` with `600` permissions. You can supply them through the environment instead: `TG_RELAY_BOT_TOKEN`, `TG_RELAY_CHAT_ID`.
+   Paste the token when asked. It isn't echoed. In a classic Windows console, Ctrl+V reads the token from the clipboard, and right-click pastes as well. Run `setup --show` to see what you type. Then send the `/pair <code>` message it prints to your bot. The token and chat id are saved to `~/.config/tg-relay/config.json` with `600` permissions. You can supply them through the environment instead: `TG_RELAY_BOT_TOKEN`, `TG_RELAY_CHAT_ID`.
 
 3. **Install the plugin.** Inside Claude Code (in the desktop app too):
 
